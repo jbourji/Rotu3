@@ -1,0 +1,522 @@
+import tkinter as tk
+import base_donnee_ajustements_arbres as ar 
+import base_donnee_ajustements_alesages as al
+import math as m
+import numpy as np
+import matplotlib.pyplot as plt
+import generation_rapport_pdf as pdf
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import mplcursors
+
+# Listes des ajusts
+liste_ajusts_arbre = ['e7','e8','e9',
+                           'f6','f7','f8',
+                           'g5','g6','g7',
+                           'h5','h6','h7','h8','h9','h10','h11',
+                           'js5','js6','js7',
+                           'k5','k6','k7',
+                           'm5','m6','m7',
+                           'n6','n7',
+                           'p6','p7',
+                           'r6','r7',
+                           's6','s7']
+
+liste_ajusts_alesage = ['E8','E9',
+                           'F7','F8',
+                           'G6','G7',
+                           'H5','H6','H7','H8','H9','H10','H11',
+                           'JS5','JS6','JS7',
+                           'K5','K6','K7',
+                           'M5','M6','M7',
+                           'N6','N7',
+                           'P6','P7','P9',
+                           'R6','R7',
+                           'S6','S7']
+
+def generate_interactive_plot(rapport_graphe,liste_rotulage_max_graphe,
+                              liste_rotulage_min_graphe,liste_rotulage_moyen_graphe):
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.plot(rapport_graphe, liste_rotulage_min_graphe, label='Angle de rotulage minimum')
+    ax.plot(rapport_graphe, liste_rotulage_max_graphe, label='Angle de rotulage maximum')
+    ax.plot(rapport_graphe, liste_rotulage_moyen_graphe, label='Angle de rotulage moyen')
+    ax.set_xlabel('Rapport L/D')
+    ax.set_ylabel('Angles de rotulage')
+    ax.set_title('Angles de rotulage en fonction du rapport')
+    ax.legend()
+
+    # Ajout des lignes horizontales y=5 et y=20 en pointillé
+    plt.axhline(y=5, color='gray', linestyle='--')
+    plt.axhline(y=20, color='gray', linestyle='--')
+
+    # Calcul des intersections avec les courbes existantes
+    index_max_5 = np.argmin(np.abs(np.array(liste_rotulage_max_graphe) - 5))
+    index_min_20 = np.argmin(np.abs(np.array(liste_rotulage_min_graphe) - 20))
+
+    coord_max_5 = (rapport_graphe[index_max_5], 5)
+    coord_min_20 = (rapport_graphe[index_min_20], 20)
+
+    # Ajout des lignes verticales aux intersections
+    plt.axvline(x=coord_max_5[0], ymin=0, ymax=5/20, color='red', linestyle='--')
+    plt.axvline(x=coord_min_20[0], ymin=0, ymax=20/20, color='blue', linestyle='--')
+
+    plt.grid(True)
+    canvas = FigureCanvasTkAgg(fig, master=root)
+    canvas.draw()
+    canvas.get_tk_widget().grid(row=12, column=0, columnspan=4, rowspan=10, sticky='nsew')
+
+    # Ajout des étiquettes interactives avec mplcursors
+    cursor = mplcursors.cursor(ax, hover=True)
+    cursor.connect("add", lambda sel: sel.annotation.set_text(f"x={sel.target[0]:.2f}, y={sel.target[1]:.2f}"))
+
+# Activation de la touche "Convertir" pa le bouton "Enter"
+def appuyer_enter(event):
+    run_calculation()
+
+# Définition d'une fonction qui vérifie si le diamètre est float
+def est_nombre_float(valeur):
+    try:
+        float(valeur)  # Tente de convertir la valeur en float
+        return True  # Si la conversion réussit, c'est un nombre float
+    except ValueError:
+        return False  # Si la conversion échoue, ce n'est pas un nombre float
+
+# Définition forme des titres
+def texte_gras_souligne(texte):
+    print(f"{texte}")
+  
+
+def display_prints_to_text(*args, **kwargs):
+    # Concatène tous les arguments imprimés pour former une chaîne de texte
+    text = ' '.join(map(str, args)) + '\n'
+    text_widget.insert(tk.END, text)  # Insère le texte dans le widget Text
+    text_widget.see(tk.END)  # Fait défiler le widget Text vers le bas pour voir le dernier ajout
+
+
+# Redéfinition de la fonction display_prints pour qu'elle utilise display_prints_to_text
+print = display_prints_to_text
+
+
+# Définition fin d'une partie
+def fin_partie ():
+    print (' ')
+    print("--------------------------------------------")
+    print (' ')
+
+# Définition fonction conversion µm en mm
+def conversion_micro_mm (valeur) :
+    valeur_convertie = valeur * 10**-3
+    return valeur_convertie
+
+# Création de la fenêtre principale
+root = tk.Tk()
+root.title("Application de calcul de l'angle de rotulage")
+
+# Création des éléments de l'interface utilisateur
+label_diam_nom = tk.Label(root, text="Diamètre nominal [1,250]: ")
+entry_diam_nom = tk.Entry(root)
+
+var_ajust_arbre = tk.StringVar(root)
+var_ajust_alesage = tk.StringVar(root)
+
+option_menu_arbre = tk.OptionMenu(root, var_ajust_arbre, *liste_ajusts_arbre)
+option_menu_alesage = tk.OptionMenu(root, var_ajust_alesage, *liste_ajusts_alesage)
+
+label_ajust_alesage = tk.Label(root, text="Ajustement de l'alésage : ")
+option_menu_arbre.grid(row=2, column=1)
+
+label_ajust_arbre = tk.Label(root, text="Ajustement de l'arbre : ")
+option_menu_alesage.grid(row=1, column=1)
+
+label_longueur_bague = tk.Label(root,text = 'Longueur de la bague : ')
+entry_longueur_bague=tk.Entry(root)
+
+# Fonction pour calculer la largeur et la hauteur du texte
+def compute_text_dimensions(text):
+    lines = text.split('\n')
+    max_line_length = max(len(line) for line in lines)
+    num_lines = len(lines)
+    return num_lines, max_line_length
+
+def display_prints(message):
+    print(message)
+
+    # Calcul des dimensions du texte
+    lines, max_length = compute_text_dimensions(message)
+    # Ajustement de la taille du widget Text
+    text_widget.config(height=30, width=max_length + 25)  # Ajoutez une marge pour plus d'espace
+
+# Fonction pour exécuter le code existant avec les données saisies par l'utilisateur
+def run_calculation():
+    # Récupérer les valeurs saisies par l'utilisateur depuis les Entry widgets
+    diam_nom_str = entry_diam_nom.get()
+    ajust_alesage = var_ajust_alesage.get()
+    ajust_arbre = var_ajust_arbre.get()
+    longueur_bague_avec_chanfreins_str = entry_longueur_bague.get()
+    rep_rattrapage = var_rattrapage.get()
+    rep_pdf = var_pdf.get()
+
+    if est_nombre_float(diam_nom_str) and est_nombre_float(longueur_bague_avec_chanfreins_str):
+        # Si ce sont des float, convertir en float pour les calculs
+        diam_nom = float(diam_nom_str)
+        longueur_bague = float(longueur_bague_avec_chanfreins_str)
+        # Récuéparation des valeurs de longueurs des chanfreins et vérification
+        if var_chanfreins.get() == 1:
+            longueur_chanfreins_str = entry_chanfreins.get()
+            if est_nombre_float(longueur_chanfreins_str):
+                longueur_chanfreins = float(longueur_chanfreins_str)
+                longueur_bague-= longueur_chanfreins
+            else :
+                display_prints("Veuillez entrer une valeur numérique valide pour la longueur du chanfrein.")
+
+        if var_chanfreins.get() == 2:
+            longueur_chanfreins_1_str = entry_chanfreins_1.get()
+            longueur_chanfreins_2_str = entry_chanfreins_2.get()
+            if est_nombre_float(longueur_chanfreins_1_str) and est_nombre_float(longueur_chanfreins_2_str):
+                longueur_chanfreins_1 = float(longueur_chanfreins_1_str)
+                longueur_chanfreins_2 = float(longueur_chanfreins_2_str)
+                longueur_bague -= (longueur_chanfreins_1 + longueur_chanfreins_2)
+            else :
+                display_prints("Veuillez entrer des valeurs numériques valides pour les longueurs des chanfreins.")
+    
+        else:
+            longueur_chanfreins =  0
+
+
+        # ajust alesage
+        value = False
+        while value == False :
+            if ajust_alesage and ajust_alesage[0].isupper() and ajust_alesage in liste_ajusts_alesage:
+                value = True
+            else :
+                display_prints (f"/!\ ERREUR : Veuillez entrez un élement dans la liste {liste_ajusts_alesage}.")
+
+        upper_tol_alesage,lower_tol_alesage = al.calcul_it_alesage (diam_nom,ajust_alesage)
+
+        # ajust arbre
+        value = False
+        while value == False :
+            if ajust_arbre and ajust_arbre[0].islower() and ajust_arbre in liste_ajusts_arbre:
+                value = True
+            else :
+                display_prints (f"/!\ ERREUR : Veuillez entrez un élement dans la liste {liste_ajusts_arbre}.")
+
+        upper_tol_arbre,lower_tol_arbre = ar.calcul_it_arbre(diam_nom,ajust_arbre)
+
+        # Imprimer le diamètre nominale est les ajust et rapport L/D
+        fin_partie()
+        texte_gras_souligne('Données entrer :')
+        diam_nom_without_decimal = int(diam_nom) if diam_nom.is_integer() else diam_nom
+        display_prints(f"{diam_nom_without_decimal}{ajust_alesage}{ajust_arbre} Avec longueur de contact L = {longueur_bague}.")
+
+        rapport_L_D = longueur_bague/diam_nom
+        display_prints(f"Rapport L/D (Longueur/Diamètre) : {round(rapport_L_D,4)}")
+        fin_partie ()
+
+        # Calcul max et min de l'arbre et de l'alésage
+        # Arbre :
+        max_arbre = diam_nom + conversion_micro_mm(upper_tol_arbre)
+        min_arbre = diam_nom + conversion_micro_mm(lower_tol_arbre)
+
+        # Alésage :
+        max_alesage = diam_nom + conversion_micro_mm(upper_tol_alesage)
+        min_alesage = diam_nom + conversion_micro_mm(lower_tol_alesage)
+
+        # Calcul des jeux min,moyen et maxi
+        jeu_mini = min_alesage - max_arbre
+        jeu_max = max_alesage - min_arbre
+        jeu_moyen = (jeu_max + jeu_mini)/2
+
+        # Affichage des jeux min, moyen et maxi
+        texte_gras_souligne("Les jeux dans la liaison sont :")
+        display_prints(f"Jeux mini : {round(jeu_mini,4)} mm")
+        display_prints(f"Jeux moyen : {round(jeu_moyen,4)} mm")
+        display_prints(f"Jeux maxi : {round(jeu_max,4)} mm")
+        fin_partie()
+
+        # Calcul des angles de rotulage min, moyen et max
+        # En radian :
+        rotulage_min_rad = m.atan(jeu_mini/longueur_bague)
+        rotulage_max_rad = m.atan(jeu_max/longueur_bague)
+        rotulage_moyen_rad = m.atan(jeu_moyen/longueur_bague)
+
+        # En degrès :
+        rotulage_min_degre = m.degrees(rotulage_min_rad)
+        rotulage_max_degre = m.degrees(rotulage_max_rad)
+        rotulage_moyen_degre = m.degrees(rotulage_moyen_rad)
+
+        # En minutes d'arc :
+        rotulage_min = round(rotulage_min_degre * 60,4)
+        rotulage_max = round(rotulage_max_degre * 60,4)
+        rotulage_moyen = round(rotulage_moyen_degre * 60,4)
+
+        # Affichage des résultats de rotulage :
+        texte_gras_souligne("Les angles de rotulage calculées (en minutes d'arc) :")
+        display_prints (f"L'angle de rotulage minimale \u03B1_min est de {rotulage_min}'")
+        display_prints (f"L'angle de rotulage moyen \u03B1_moy est de {rotulage_moyen}'")
+        display_prints (f"L'angle de rotulage maximum \u03B1_max est de {rotulage_max}'")
+        fin_partie ()
+
+        # Affichage si PG ou LA
+        suite_type_liaison=''
+        texte_gras_souligne("Le type de la liaison :")
+        if rotulage_max <= 5 :
+            display_prints("Cette liaison est de type Pivot Glissant.")
+            type_liaison = "Pivot Glissant car \u03B1_max <= 5'"
+        elif rotulage_min >= 20 :
+            display_prints ("Cette liaison est de type Linéaire annulaire.")
+            type_liaison = "Linéaire Annulaire car \u03B1_min >= 20'"
+        else :
+            display_prints('''L'angle de rotugale maxiamle est supérieur à 5' et 
+l'angle de rotulage minimale est inférieur à 20', 
+il est donc impossible de vérifier si la liaison est
+de type Linéaire Annulaire ou Pivot Glissant.''')
+            type_liaison = '''\u03B1_max > 5 et \u03B1_min < 20,'''
+            suite_type_liaison = "donc impossible de déterminer si PG ou LA."
+
+        fin_partie()
+
+        # Calcul du rapport L/D pour avoir un PG
+        texte_gras_souligne ("Longueur de bague minimale pour avoir une liaison Pivot Glissant :")
+        longueur_min_PG = round(jeu_max/m.tan(m.radians(5/60)),4)
+        display_prints (f'''Pour avoir une liaison de type Pivot Glissant et
+conserver le même diamètre et ajusts, il faut une
+longueur de bague minimale de {longueur_min_PG} mm.''')
+
+        fin_partie ()
+
+        # Calcul du rapport L/D pour avoir une LA
+        texte_gras_souligne ("Longueur de bague minimale pour avoir une liaison Linéaire Annulaire :")
+        longueur_max_LA = round(jeu_mini/m.tan(m.radians(20/60)),4)
+        display_prints (f'''Pour avoir une liaison de type Linéaire Annulaire
+et conserver le même diamètre et ajusts, il faut une
+longueur de bague maximale de {longueur_max_LA} mm.''')
+
+        fin_partie ()
+
+        # Calcul des angles et rapport pour graphe
+        rapport_graphe = np.arange(0.05, 3.1, 0.1)
+        liste_rotulage_min_graphe = []
+        liste_rotulage_max_graphe = []
+        liste_rotulage_moyen_graphe = []
+        for i in rapport_graphe :
+            # Calcul des angles de rotulage pour chaque valeur
+            rotulage_min_graphe =  m.degrees(m.atan(jeu_mini/(i*diam_nom)))*60
+            rotulage_max_graphe =  m.degrees(m.atan(jeu_max/(i*diam_nom)))*60
+            rotulage_moyen_graphe =  m.degrees(m.atan(jeu_moyen/(i*diam_nom)))*60
+            # Création des listes des angles de rotulages
+            liste_rotulage_min_graphe.append(rotulage_min_graphe)
+            liste_rotulage_max_graphe.append(rotulage_max_graphe)
+            liste_rotulage_moyen_graphe.append(rotulage_moyen_graphe)
+
+        # Affichage graphe
+        generate_interactive_plot(rapport_graphe,liste_rotulage_max_graphe,
+                              liste_rotulage_min_graphe,liste_rotulage_moyen_graphe)
+    else:
+        # Si ce ne sont pas des float, afficher un message d'erreur
+        display_prints("Veuillez entrer des valeurs numériques valides pour le diamètre et la longueur.")
+    
+    ecart_radial_rattrape_min = ''
+    ecart_radial_rattrape_max = ''
+    ecart_radial_rattrape_moyen = ''
+    cf_localisation_rattrapage_min = ''
+    cf_localisation_rattrapage_max = ''
+    cf_localisation_rattrapage_moyen =''
+
+    if rep_rattrapage == 1 :
+        ecartement_bague = entry_ecart_bague.get()
+        if est_nombre_float (ecartement_bague) and float(ecartement_bague) > 0 :
+            ecartement_bague = float(ecartement_bague)
+            # Calcul des écarts radial rattrapé
+            ecart_radial_rattrape_min = round(ecartement_bague * m.tan(rotulage_min_rad),4)
+            ecart_radial_rattrape_max = round(ecartement_bague * m.tan(rotulage_max_rad),4)
+            ecart_radial_rattrape_moyen = round(ecartement_bague * m.tan(rotulage_moyen_rad),4)
+            # Affichage des écarts radiale rattrapé
+            fin_partie()
+            texte_gras_souligne (f"Les écarts radiale rattrapés, pour un écart de {ecartement_bague} sont :")
+            display_prints (f"Ecart radial minimale rattrapé sur l'autre palier : {ecart_radial_rattrape_min} mm.")
+            display_prints (f"Ecart radial moyen rattrapé sur l'autre palier : {ecart_radial_rattrape_moyen} mm.")
+            display_prints (f"Ecart radial maximale rattrapé sur l'autre palier : {ecart_radial_rattrape_max} mm.")
+            fin_partie()
+            # Calcul Intervalle de tolérance rattrapage
+            cf_localisation_rattrapage_min = round(2*ecart_radial_rattrape_min,4)
+            cf_localisation_rattrapage_max = round(2*ecart_radial_rattrape_max,4)
+            cf_localisation_rattrapage_moyen = round(2*ecart_radial_rattrape_moyen,4)
+            # Affichage Intervalle de tolérance rattrapage
+            texte_gras_souligne("Les intervalles de tolérances pour rattrapage :")
+            display_prints (f"Intervalle de tolérance minimale pour rattrapage sur l'autre palier : {cf_localisation_rattrapage_min} mm.")
+            display_prints (f"Intervalle de tolérance moyen pour rattrapage sur l'autre palier : {cf_localisation_rattrapage_moyen} mm.")
+            display_prints (f"Intervalle de tolérance maximal pour rattrapage sur l'autre palier : {cf_localisation_rattrapage_max} mm.")
+            fin_partie()
+        else :
+            display_prints("Veuillez entrez une valeur valide pour l'écartement des bagues.")
+
+    if rep_pdf == 1 :
+        if rep_rattrapage == 1 :
+            value_pdf = True
+            chemin_fichier = pdf.generate_report_pdf(type_liaison,suite_type_liaison,diam_nom_without_decimal, ajust_alesage, ajust_arbre, longueur_bague, rapport_L_D,
+                        jeu_mini, jeu_max, jeu_moyen, rotulage_min, rotulage_moyen, rotulage_max,value_pdf,
+                        rapport_graphe, liste_rotulage_min_graphe,liste_rotulage_max_graphe,liste_rotulage_moyen_graphe,
+                        longueur_min_PG,longueur_max_LA,ecartement_bague,
+                        ecart_radial_rattrape_min ,ecart_radial_rattrape_moyen,ecart_radial_rattrape_max,
+                        cf_localisation_rattrapage_min,cf_localisation_rattrapage_moyen,cf_localisation_rattrapage_max)
+            if chemin_fichier != False :
+                display_prints (f"Le rapport utilisateur a été généré : {chemin_fichier}.")
+                fin_partie()
+                display_prints ("Merci pour avoir utilisé le programme, et bonne journée!:)")
+            elif chemin_fichier == False :
+                display_prints (f"Aucun rapport n'a été généré.")
+                fin_partie()
+                display_prints ("Merci pour avoir utilisé le programme, et bonne journée!:)")
+            value = True
+        elif rep_rattrapage == 2:
+            value_pdf = False
+            chemin_fichier = pdf.generate_report_pdf(type_liaison,suite_type_liaison,diam_nom_without_decimal, ajust_alesage, ajust_arbre, longueur_bague, rapport_L_D,
+                        jeu_mini, jeu_max, jeu_moyen, rotulage_min, rotulage_moyen, rotulage_max,value_pdf,
+                        rapport_graphe, liste_rotulage_min_graphe,liste_rotulage_max_graphe,liste_rotulage_moyen_graphe,
+                        longueur_min_PG,longueur_max_LA)
+            if chemin_fichier != False :
+                display_prints (f"Le rapport utilisateur a été généré : {chemin_fichier}.")
+                fin_partie()
+                display_prints ("Merci pour avoir utilisé le programme, et bonne journée!:)")
+            elif chemin_fichier == False :
+                display_prints (f"Aucun rapport n'a été généré.")
+                fin_partie()
+                display_prints ("Merci pour avoir utilisé le programme, et bonne journée!:)")
+    
+    return (diam_nom, ajust_alesage, ajust_arbre, longueur_bague, rapport_L_D,
+                        jeu_mini, jeu_max, jeu_moyen, rotulage_min, rotulage_moyen, rotulage_max,value,
+                        rapport_graphe, liste_rotulage_min_graphe,liste_rotulage_max_graphe,liste_rotulage_moyen_graphe,
+                        longueur_min_PG,longueur_max_LA,
+                        ecart_radial_rattrape_min, ecart_radial_rattrape_max,ecart_radial_rattrape_moyen,
+                        cf_localisation_rattrapage_min,cf_localisation_rattrapage_max,cf_localisation_rattrapage_moyen)
+    
+
+
+# Bouton pour exécuter le calcul
+calculate_button = tk.Button(root, text="Calculer", command=run_calculation)
+
+# Placement des éléments dans la fenêtre
+label_diam_nom.grid(row=0, column=0,sticky='e')
+entry_diam_nom.grid(row=0, column=1)
+label_ajust_alesage.grid(row=1, column=0,sticky='e')
+option_menu_alesage.grid(row=1, column=1)
+label_ajust_arbre.grid(row=2, column=0,sticky='e')
+option_menu_arbre.grid(row=2, column=1)
+label_longueur_bague.grid(row=3, column=0,sticky='e')
+entry_longueur_bague.grid(row=3, column=1)
+
+# Définition des variables
+var_chanfreins =tk.IntVar()
+var_rattrapage = tk.IntVar()
+var_pdf = tk.IntVar()
+
+# Création des bouton des variables d'entrées
+
+# Show entry chanfreins si 1 ou 2
+label_chanfreins = tk.Label(root, text="Longueur chanfrein : ")
+entry_chanfreins = tk.Entry(root)        
+
+label_chanfreins_1 = tk.Label(root, text="Longueur chanfrein 1 : ")
+entry_chanfreins_1 = tk.Entry(root)
+
+label_chanfreins_2 = tk.Label(root, text="Longueur chanfrein 2 : ")
+entry_chanfreins_2 = tk.Entry(root)
+
+def hide_entry_chanfreins():
+    label_chanfreins.grid_forget()
+    entry_chanfreins.grid_forget()
+
+    label_chanfreins_1.grid_forget()
+    entry_chanfreins_1.grid_forget()
+
+    label_chanfreins_2.grid_forget()
+    entry_chanfreins_2.grid_forget()
+
+def show_entry_chanfreins_1():
+    if var_chanfreins.get() == 1:
+        label_chanfreins.grid(row=5, column=0,sticky='e')
+        entry_chanfreins.grid(row=5, column=1)
+    
+    else:
+        hide_entry_chanfreins()
+
+def show_entry_chanfreins_2():
+    if var_chanfreins.get() == 2:
+        label_chanfreins_1.grid(row=5, column=0,sticky='e')
+        entry_chanfreins_1.grid(row=5, column=1)
+
+        label_chanfreins_2.grid(row=6, column=0,sticky='e')
+        entry_chanfreins_2.grid(row=6, column=1)
+    
+    else:
+        hide_entry_chanfreins()
+
+label_nb_chanfreins = tk.Label(root, text='''Combien de chanfreins sur la bague? :''')
+label_nb_chanfreins.grid(row = 4, column = 0,sticky='e')
+
+radio_0_chanfreins = tk.Radiobutton(root, text="0", variable=var_chanfreins, value=0,command=hide_entry_chanfreins)
+radio_0_chanfreins.grid(row = 4, column = 1)
+
+radio_1_chanfreins = tk.Radiobutton(root, text="1", variable=var_chanfreins, value=1, command = show_entry_chanfreins_1)
+radio_1_chanfreins.grid(row = 4, column = 2)
+
+radio_2_chanfreins = tk.Radiobutton(root, text="2", variable=var_chanfreins, value=2, command = show_entry_chanfreins_2)
+radio_2_chanfreins.grid(row = 4, column = 3)
+
+# Show entry rattrapage (écartement bague) si oui
+label_ecart_bague = tk.Label(root, text="Ecart entre les deux bagues : ")
+entry_ecart_bague = tk.Entry(root)
+def hide_entry_ecart_bague():
+    label_ecart_bague.grid_forget()
+    entry_ecart_bague.grid_forget()
+
+def show_entry_ecart_bague():
+    if var_rattrapage.get() == 1:
+        label_ecart_bague.grid(row=8, column=0,sticky='e')
+        entry_ecart_bague.grid(row=8, column=1)
+    else:
+        hide_entry_ecart_bague()
+
+label_rattrapage = tk.Label(root, text='''Voulez-vous calculer l'écart radial rattrapé par une autre bague? :''')
+label_rattrapage.grid(row = 7, column = 0,sticky='e')
+
+radio_oui_rattrapage = tk.Radiobutton(root, text="Oui", variable=var_rattrapage, value=1,command=show_entry_ecart_bague)
+radio_oui_rattrapage.grid(row = 7, column = 1)
+
+radio_non_rattrapage = tk.Radiobutton(root, text="Non", variable=var_rattrapage, value=2, command = hide_entry_ecart_bague)
+radio_non_rattrapage.grid(row = 7, column = 2)
+
+label_pdf= tk.Label(root, text="Voulez-vous générez un fichier PDF ? :")
+label_pdf.grid(row = 9, column = 0,sticky='e')
+
+radio_oui_pdf = tk.Radiobutton(root, text="Oui", variable=var_pdf, value=1)
+radio_oui_pdf.grid(row = 9, column = 1)
+
+radio_non_pdf = tk.Radiobutton(root, text="Non", variable=var_pdf, value=2)
+radio_non_pdf.grid(row = 9, column = 2)
+
+calculate_button.grid(row=10, columnspan=3)
+
+# Toucher "Enter" pour activer le bouton convertir
+root.bind('<Return>', appuyer_enter)
+
+# # Chemin vers votre icône au format .ico (Windows) ou .png (Linux/Mac)
+# icon_path = "C:\\Users\\Jawad\\OneDrive\\Bureau\\Python\\Entrainement\\Exercice4_Ajustement_PG_LA\\icon.ico"
+
+# # Définit l'icône de la fenêtre principale
+# root.iconbitmap(default=icon_path)
+
+text_widget = tk.Text(root, height=30, width=0)
+text_widget.grid(row=0, column=10, rowspan=10, columnspan=4, sticky='nsew')
+
+# Ajoutez ici le code pour clôturer proprement l'application avant de finaliser
+def on_closing():
+    if tk.messagebox.askokcancel("Quitter", "Voulez-vous vraiment quitter?"):
+        root.destroy()
+
+# Attacher la fonction on_closing à l'événement de fermeture de la fenêtre
+root.protocol("WM_DELETE_WINDOW", on_closing)
+
+
+# Exécution de l'application
+root.mainloop()
